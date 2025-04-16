@@ -5,9 +5,15 @@
 #include <nlohmann/json.hpp>
 
 #include <chrono>
+#include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
+
+using PropertyName = std::string;
+using PropertyValues = std::string;
+using InterfaceName = std::string;
 
 namespace data_sync::config
 {
@@ -65,6 +71,42 @@ struct Retry
      * @brief Retry interval in seconds
      */
     std::chrono::seconds _retryIntervalInSec;
+};
+
+/**
+ * @brief Container for suspend and resume state
+ */
+struct StateInfo
+{
+    /**
+     * @brief Maps a property name to a set of values that
+     *        trigger suspension
+     */
+    std::map<PropertyName, std::set<PropertyValues>> _suspendStates;
+
+    /**
+     * @brief Maps a property name to a set of values that
+     *        trigger resumption
+     */
+    std::map<PropertyName, std::set<PropertyValues>> _resumeStates;
+
+    std::string _serviceName;
+};
+
+/**
+ * @brief Contains state-driven synchronization configuration
+ */
+struct StateDrivenSync
+{
+    /**
+     * @brief Indicates if synchronization is currently suspended
+     * */
+    bool _suspendSync;
+
+    /**
+     * @brief A map from interface names to their corresponding StateInfo
+     * */
+    std::map<InterfaceName, StateInfo> _interfaces;
 };
 
 /**
@@ -182,6 +224,16 @@ struct DataSyncConfig
      *       include only certain file during the synchronization.
      */
     std::optional<std::vector<std::string>> _includeFileList;
+
+    /**
+     * @brief State-driven synchronization configuration
+     *
+     * @note Holds a value if the specific directory or files
+     *       Contains state-driven sync data
+     */
+    std::optional<StateDrivenSync> _stateDrivenSync;
+
+    void printStateDrivenSync();
 
   private:
     /**
