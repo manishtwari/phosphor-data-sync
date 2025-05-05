@@ -30,11 +30,7 @@ TEST_F(ManagerTest, testDataChangeInFile)
         co_return;
     });
 
-    EXPECT_CALL(*mockExtDataIfaces, fetchSiblingBmcIP())
-        // NOLINTNEXTLINE
-        .WillRepeatedly([]() -> sdbusplus::async::task<> { co_return; });
-
-    EXPECT_CALL(*mockExtDataIfaces, fetchRbmcCredentials())
+    EXPECT_CALL(*mockExtDataIfaces, fetchSiblingBmcPos())
         // NOLINTNEXTLINE
         .WillRepeatedly([]() -> sdbusplus::async::task<> { co_return; });
 
@@ -107,11 +103,7 @@ TEST_F(ManagerTest, testDataDeleteInDir)
         co_return;
     });
 
-    EXPECT_CALL(*mockExtDataIfaces, fetchSiblingBmcIP())
-        // NOLINTNEXTLINE
-        .WillRepeatedly([]() -> sdbusplus::async::task<> { co_return; });
-
-    EXPECT_CALL(*mockExtDataIfaces, fetchRbmcCredentials())
+    EXPECT_CALL(*mockExtDataIfaces, fetchSiblingBmcPos())
         // NOLINTNEXTLINE
         .WillRepeatedly([]() -> sdbusplus::async::task<> { co_return; });
 
@@ -192,11 +184,7 @@ TEST_F(ManagerTest, testDataDeletePathFile)
         co_return;
     });
 
-    EXPECT_CALL(*mockExtDataIfaces, fetchSiblingBmcIP())
-        // NOLINTNEXTLINE
-        .WillRepeatedly([]() -> sdbusplus::async::task<> { co_return; });
-
-    EXPECT_CALL(*mockExtDataIfaces, fetchRbmcCredentials())
+    EXPECT_CALL(*mockExtDataIfaces, fetchSiblingBmcPos())
         // NOLINTNEXTLINE
         .WillRepeatedly([]() -> sdbusplus::async::task<> { co_return; });
 
@@ -281,11 +269,7 @@ TEST_F(ManagerTest, testDataChangeWhenSyncIsDisabled)
         co_return;
     });
 
-    EXPECT_CALL(*mockExtDataIfaces, fetchSiblingBmcIP())
-        // NOLINTNEXTLINE
-        .WillRepeatedly([]() -> sdbusplus::async::task<> { co_return; });
-
-    EXPECT_CALL(*mockExtDataIfaces, fetchRbmcCredentials())
+    EXPECT_CALL(*mockExtDataIfaces, fetchSiblingBmcPos())
         // NOLINTNEXTLINE
         .WillRepeatedly([]() -> sdbusplus::async::task<> { co_return; });
 
@@ -375,11 +359,7 @@ TEST_F(ManagerTest, testDataCreateInSubDir)
         co_return;
     });
 
-    EXPECT_CALL(*mockExtDataIfaces, fetchSiblingBmcIP())
-        // NOLINTNEXTLINE
-        .WillRepeatedly([]() -> sdbusplus::async::task<> { co_return; });
-
-    EXPECT_CALL(*mockExtDataIfaces, fetchRbmcCredentials())
+    EXPECT_CALL(*mockExtDataIfaces, fetchSiblingBmcPos())
         // NOLINTNEXTLINE
         .WillRepeatedly([]() -> sdbusplus::async::task<> { co_return; });
 

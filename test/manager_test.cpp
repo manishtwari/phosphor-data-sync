@@ -54,11 +54,7 @@ TEST_F(ManagerTest, ParseDataSyncCfg)
         // NOLINTNEXTLINE
         .WillRepeatedly([]() -> sdbusplus::async::task<> { co_return; });
 
-    EXPECT_CALL(*mockExtDataIfaces, fetchSiblingBmcIP())
-        // NOLINTNEXTLINE
-        .WillRepeatedly([]() -> sdbusplus::async::task<> { co_return; });
-
-    EXPECT_CALL(*mockExtDataIfaces, fetchRbmcCredentials())
+    EXPECT_CALL(*mockExtDataIfaces, fetchSiblingBmcPos())
         // NOLINTNEXTLINE
         .WillRepeatedly([]() -> sdbusplus::async::task<> { co_return; });
 

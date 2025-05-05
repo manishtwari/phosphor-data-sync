@@ -11,10 +11,7 @@ namespace data_sync::ext_data
 using RBMC = sdbusplus::common::xyz::openbmc_project::state::bmc::Redundancy;
 using BMCRole = RBMC::Role;
 using BMCRedundancy = bool;
-using SiblingBmcIP = std::string;
-using RbmcUserName = std::string;
-using RbmcPassword = std::string;
-using RbmcCredentials = std::pair<RbmcUserName, RbmcPassword>;
+using SiblingBmcPos = size_t;
 
 /**
  * @class ExternalDataIFaces
@@ -58,18 +55,11 @@ class ExternalDataIFaces
     BMCRedundancy bmcRedundancy() const;
 
     /**
-     * @brief Used to obtain the Sibling BMC IP.
+     * @brief Used to obtain the Sibling BMC Position.
      *
-     * @return The Sibling BMC IP
+     * @return The Sibling BMC Position
      */
-    const SiblingBmcIP& siblingBmcIP() const;
-
-    /**
-     * @brief Used to obtain the BMC username and password
-     *
-     * @return BMC Username and Password
-     */
-    const RbmcCredentials& rbmcCredentials() const;
+    const SiblingBmcPos& siblingBmcPos() const;
 
   protected:
     /**
@@ -78,14 +68,9 @@ class ExternalDataIFaces
     virtual sdbusplus::async::task<> fetchBMCRedundancyMgrProps() = 0;
 
     /**
-     * @brief Used to retrieve the Sibling BMC IP.
+     * @brief Used to retrieve the Sibling BMC Position.
      */
-    virtual sdbusplus::async::task<> fetchSiblingBmcIP() = 0;
-
-    /**
-     * @brief Used to retrieve the BMC Username and Password.
-     */
-    virtual sdbusplus::async::task<> fetchRbmcCredentials() = 0;
+    virtual sdbusplus::async::task<> fetchSiblingBmcPos() = 0;
 
     /**
      * @brief A utility API to assign the retrieved BMC role.
@@ -106,23 +91,13 @@ class ExternalDataIFaces
     void bmcRedundancy(const BMCRedundancy& bmcRedundancy);
 
     /**
-     * @brief A utility API to assign the retrieved Sibling BMC IP.
+     * @brief A utility API to assign the retrieved Sibling BMC Position.
      *
-     * @param[in] siblingBmcIP - The retrieved Sibling BMC IP.
-     *
-     * @return None.
-     */
-    void siblingBmcIP(const SiblingBmcIP& siblingBmcIP);
-
-    /**
-     * @brief A utility API to assign the retrieved BMC Username and Password.
-     *
-     * @param[in] rbmcCredentials - The retrieved Sibling BMC Username and
-     *                              Password.
+     * @param[in] siblingBmcPos - The retrieved Sibling BMC Position.
      *
      * @return None.
      */
-    void rbmcCredentials(const RbmcCredentials& rbmcCredentials);
+    void siblingBmcPos(const SiblingBmcPos& siblingBmcPos);
 
   private:
     /**
@@ -136,14 +111,9 @@ class ExternalDataIFaces
     BMCRedundancy _bmcRedundancy{false};
 
     /**
-     * @brief hold the Sibling BMC IP
+     * @brief hold the Sibling BMC Position
      */
-    SiblingBmcIP _siblingBmcIP;
-
-    /**
-     * @brief This is Pair, hold the BMCs Username and Password
-     */
-    RbmcCredentials _rbmcCredentials;
+    SiblingBmcPos _siblingBmcPos;
 };
 
 } // namespace data_sync::ext_data
