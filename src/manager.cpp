@@ -23,7 +23,8 @@ Manager::Manager(sdbusplus::async::context& ctx,
                  std::unique_ptr<ext_data::ExternalDataIFaces>&& extDataIfaces,
                  const fs::path& dataSyncCfgDir) :
     _ctx(ctx), _extDataIfaces(std::move(extDataIfaces)),
-    _dataSyncCfgDir(dataSyncCfgDir), _syncBMCDataIface(ctx, *this)
+    _dataSyncCfgDir(dataSyncCfgDir), _syncBMCDataIface(ctx, *this),
+    _stateDrivenSync(ctx, *this)
 {
     _ctx.spawn(init());
 }
@@ -126,13 +127,37 @@ bool Manager::isSyncEligible(const config::DataSyncConfig& dataSyncCfg)
 // NOLINTNEXTLINE
 sdbusplus::async::task<> Manager::startSyncEvents()
 {
-    std::ranges::for_each(
-        _dataSyncConfiguration |
-            std::views::filter([this](const auto& dataSyncCfg) {
+    std::ranges::for_each(_dataSyncConfiguration |
+                              std::views::filter([this](auto& dataSyncCfg) {
         return this->isSyncEligible(dataSyncCfg);
     }),
-        [this](const auto& dataSyncCfg) {
+                          [this](auto& dataSyncCfg) {
         using enum config::SyncType;
+
+        if (dataSyncCfg._stateDrivenSync.has_value())
+        {
+            for (const auto& interfaceEntry :
+                 dataSyncCfg._stateDrivenSync.value()._interfaces)
+            {
+                std::string dbusInterface = interfaceEntry.first;
+
+                auto it = watcherLists.find(dbusInterface);
+                if (it == watcherLists.end())
+                {
+                    std::vector<config::DataSyncConfig*> controlledConfigs{
+                        &dataSyncCfg};
+
+                    watcherLists[dbusInterface] = std::move(controlledConfigs);
+                    _ctx.spawn(_stateDrivenSync.watchBmcPropertiesChanged(
+                        dbusInterface));
+                }
+                else
+                {
+                    auto& controlledConfigs = it->second;
+                    controlledConfigs.push_back(&dataSyncCfg);
+                }
+            }
+        }
         if (dataSyncCfg._syncType == Immediate)
         {
             this->_ctx.spawn(this->monitorDataToSync(dataSyncCfg));
@@ -192,6 +217,13 @@ sdbusplus::async::task<bool>
     co_return true;
 }
 
+sdbusplus::async::task<bool>
+    // NOLINTNEXTLINE
+    Manager::syncCallback(const config::DataSyncConfig& dataSyncCfg)
+{
+    co_return co_await syncData(dataSyncCfg);
+}
+
 sdbusplus::async::task<>
     // NOLINTNEXTLINE
     Manager::monitorDataToSync(const config::DataSyncConfig& dataSyncCfg)
@@ -223,7 +255,19 @@ sdbusplus::async::task<>
                 }
                 for ([[maybe_unused]] const auto& dataOp : dataOperations)
                 {
-                    co_await syncData(dataSyncCfg);
+                    if (dataSyncCfg._stateDrivenSync.has_value())
+                    {
+                        const auto& stateSync =
+                            dataSyncCfg._stateDrivenSync.value();
+                        if (!stateSync._suspendSync)
+                        {
+                            co_await syncData(dataSyncCfg);
+                        }
+                    }
+                    else
+                    {
+                        co_await syncData(dataSyncCfg);
+                    }
                 }
             }
         }
@@ -255,7 +299,18 @@ sdbusplus::async::task<>
         {
             break;
         }
-        co_await syncData(dataSyncCfg);
+        if (dataSyncCfg._stateDrivenSync.has_value())
+        {
+            const auto& stateSync = dataSyncCfg._stateDrivenSync.value();
+            if (!stateSync._suspendSync)
+            {
+                co_await syncData(dataSyncCfg);
+            }
+        }
+        else
+        {
+            co_await syncData(dataSyncCfg);
+        }
     }
     co_return;
 }

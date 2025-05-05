@@ -1,7 +1,54 @@
 {
     "Directories": [
+         {
+            "Path": "/var/file1",
+            "Description": "Host State Persisted data",
+            "SyncDirection": "Active2Passive",
+            "SyncType": "Immediate",
+            "StateDrivenSync" : [
+                {
+                    "xyz.openbmc_project.State.Host" :
+                    {
+                        "Service" : "xyz.openbmc_project.State.Host",
+                        "SuspendStates" :
+                                {
+                                    "CurrentHostState" : ["xyz.openbmc_project.State.Host.HostState.TransitioningToRunning"]
+                                }
+                    },
+                    "xyz.openbmc_project.State.Boot.Progress" :
+                    {
+                        "Service" : "xyz.openbmc_project.State.Host",
+                        "ResumeStates" :
+                                {
+                                    "BootProgress" : ["xyz.openbmc_project.State.Boot.Progress.ProgressStages.SystemInitComplete"]
+                                }
+                    }
+                }
+            ]
+        },
         {
-            "Path": "/var/lib/phosphor-state-manager/host{}-PersistData/",
+            "Path": "/var/lib/phosphor-inventory-manager/",
+            "Description": "System inventory persisted data",
+            "SyncDirection": "Active2Passive",
+            "SyncType": "Immediate",
+            "StateDrivenSync" : [
+                {
+                    "com.ibm.VPD.Manager": {
+                        "Service": "com.ibm.VPD.Manager",
+                        "SuspendStates": 
+                                {
+                                    "CollectionStatus": ["InProgress"]
+                                },
+                        "ResumeStates": 
+                                {
+                                    "CollectionStatus": ["Completed"]
+                                }
+                    }
+                }
+            ]
+        },
+        {
+            "Path": "/var/file2",
             "Description": "Host State Persisted data",
             "SyncDirection": "Active2Passive",
             "SyncType": "Immediate"
