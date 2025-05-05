@@ -4,6 +4,7 @@
 
 #include "data_sync_config.hpp"
 #include "external_data_ifaces.hpp"
+#include "state_driven_sync.hpp"
 #include "sync_bmc_data_ifaces.hpp"
 
 #include <filesystem>
@@ -132,6 +133,21 @@ class Manager
         _syncBMCDataIface.sync_events_health(syncEventsHealth);
     }
 
+    /**
+     * @brief A container holding D-Bus interfaces and their associated
+     *        DataSyncConfig objects.
+     *
+     *        - This container maps each D-Bus interface to a list of
+     *          DataSyncConfig objects that use that interface. It is used to
+     *          minimize the creation of duplicate watchers when the same
+     *          interface has multiple DataSyncConfig objects
+     */
+    std::map<std::string, std::vector<data_sync::config::DataSyncConfig*>>
+        watcherLists;
+
+    sdbusplus::async::task<bool>
+        syncCallback(const config::DataSyncConfig& dataSyncCfg);
+
   private:
     /**
      * @brief A helper API to start the data sync operation.
@@ -224,6 +240,11 @@ class Manager
      * @brief SyncBMCData Server Interface object
      */
     dbus_ifaces::SyncBMCDataIface _syncBMCDataIface;
+
+    /**
+     * @brief StateDrivenSync config Interface object
+     */
+    state_driven::StateDrivenSync _stateDrivenSync;
 };
 
 } // namespace data_sync

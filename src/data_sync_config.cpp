@@ -29,7 +29,8 @@ DataSyncConfig::DataSyncConfig(const nlohmann::json& config,
         convertSyncDirectionToEnum(config["SyncDirection"].get<std::string>())
             .value_or(SyncDirection::Active2Passive)),
     _syncType(convertSyncTypeToEnum(config["SyncType"].get<std::string>())
-                  .value_or(SyncType::Immediate))
+                  .value_or(SyncType::Immediate)),
+    _stateDrivenSync(StateDrivenSync())
 {
     // Initiailze optional members
     if (config.contains("DestinationPath"))
@@ -83,6 +84,58 @@ DataSyncConfig::DataSyncConfig(const nlohmann::json& config,
     else
     {
         _includeFileList = std::nullopt;
+    }
+    if (config.contains("StateDrivenSync"))
+    {
+        const auto& syncArray = config["StateDrivenSync"];
+
+        for (const auto& syncObj : syncArray)
+        {
+            for (const auto& [interfaceName, interfaceObj] : syncObj.items())
+            {
+                StateInfo stateInfo;
+
+                if (interfaceObj.contains("Service"))
+                {
+                    std::string serviceName =
+                        interfaceObj["Service"].get<std::string>();
+                    stateInfo._serviceName = serviceName;
+                }
+
+                if (interfaceObj.contains("SuspendStates"))
+                {
+                    const auto& suspendStates = interfaceObj["SuspendStates"];
+                    for (const auto& [stateType, stateList] :
+                         suspendStates.items())
+                    {
+                        for (const auto& state : stateList)
+                        {
+                            stateInfo._suspendStates[stateType].insert(state);
+                        }
+                    }
+                }
+
+                if (interfaceObj.contains("ResumeStates"))
+                {
+                    const auto& resumeStates = interfaceObj["ResumeStates"];
+                    for (const auto& [stateType, stateList] :
+                         resumeStates.items())
+                    {
+                        for (const auto& state : stateList)
+                        {
+                            stateInfo._resumeStates[stateType].insert(state);
+                        }
+                    }
+                }
+
+                _stateDrivenSync->_interfaces.emplace(interfaceName,
+                                                      std::move(stateInfo));
+            }
+        }
+    }
+    else
+    {
+        _stateDrivenSync = std::nullopt;
     }
 }
 

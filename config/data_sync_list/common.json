@@ -5,6 +5,59 @@
             "Description": "Host State Persisted data",
             "SyncDirection": "Active2Passive",
             "SyncType": "Immediate"
+        },
+        {
+            "Path": "/var/file1",
+            "Description": "Host State Persisted data",
+            "SyncDirection": "Active2Passive",
+            "SyncType": "Immediate",
+            "StateDrivenSync" : [
+                {
+                    "xyz.openbmc_project.State.deleteAll" :
+                    {
+                        "Service" : "xyz.openbmc_project.State.Host",
+                        "SuspendStates" :
+                                {
+                                    "CurrentHostState" : ["xyz.openbmc_project.State.Host.HostState.TransitioningToRunning"]
+                                }
+                    },
+
+                    "xyz.openbmc_project.State.Host" :
+                    {
+                        "Service" : "xyz.openbmc_project.State.Host",
+                        "ResumeStates" :
+                                {
+                                    "service" : "serviceA",
+                                    "BootProgress" : ["xyz.openbmc_project.State.Boot.Progress.ProgressStages.SystemInitComplete"]
+                                }
+                    }
+                }
+            ]
+        },
+        {
+            "Path": "/var/file1",
+            "Description": "Host State Persisted data",
+            "SyncDirection": "Active2Passive",
+            "SyncType": "Immediate",
+            "StateDrivenSync" : [
+                {
+                    "xyz.openbmc_project.State.deleteAll" :
+                    {
+                        "Service" : "xyz.openbmc_project.State.Host",
+                        "SuspendStates" :
+                                {
+                                    "service" : "serviceB",
+                                    "CurrentHostState" : ["xyz.openbmc_project.State.Host.HostState.TransitioningToRunning"]
+                                }
+                    }
+                }
+            ]
+        },
+        {
+            "Path": "/var/file2",
+            "Description": "Host State Persisted data",
+            "SyncDirection": "Active2Passive",
+            "SyncType": "Immediate"
         }
     ]
 }
