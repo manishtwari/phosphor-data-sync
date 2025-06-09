@@ -543,8 +543,20 @@ sdbusplus::async::task<bool>
     // NOLINTNEXTLINE
     Manager::syncData(const config::DataSyncConfig& dataSyncCfg,
                       const std::string srcPath,
-                      const std::string destPath)
+                      const std::string destPath,
+                      size_t retryCount)
 {
+    constexpr size_t defaultMaxAttempts = 1;
+    constexpr std::chrono::seconds defaultRetryIntervalSec =
+        std::chrono::seconds{30};
+
+    const size_t maxAttempts = dataSyncCfg._retry ? dataSyncCfg._retry->_retryAttempts
+                                         : defaultMaxAttempts;
+
+    const size_t retryIntervalSec = dataSyncCfg._retry
+                               ? dataSyncCfg._retry->_retryIntervalInSec.count()
+                               : defaultRetryIntervalSec.count();
+
     using namespace std::string_literals;
     std::string syncCmd{
         "rsync --archive --compress --delete --delete-missing-args --relative --times --atimes --update"};
@@ -688,21 +700,56 @@ sdbusplus::async::task<bool>
     lg2::debug("Elapsed time for sync: [{DURATION_SECONDS}] seconds for {CMD}",
               "DURATION_SECONDS", syncElapsedTime.count(), "CMD", syncCmd);
 
-    if (ret.first != 0)
+    if (ret.first == 0)
+    {
+        co_return true;
+    }
+
+    const auto srcLog = srcPath.empty() ? dataSyncCfg._path.string()
+                                               : srcPath;
+    const auto dstLog =
+        destPath.empty()
+            ? dataSyncCfg._destPath.value_or(dataSyncCfg._path).string()
+            : destPath;
+
+    if (retryCount < maxAttempts)
     {
         // TODO Retry
         // For now, just handle below rsync error codes
         // "24 - Partial transfer due to vanished source files"
+        auto retrySrcPath = srcPath;
         if (ret.first == 24)
         {
-            auto vanishedSrcs = getVanishedSrcPath(ret.second);
+            retrySrcPath = getVanishedSrcPath(ret.second);
             lg2::warning("Retry Sync with vanished paths: [{VANISHED_SRCS}]",
-                       "VANISHED_SRCS", vanishedSrcs);
-            co_return co_await syncData(dataSyncCfg, vanishedSrcs, destPath);
+                         "VANISHED_SRCS", retrySrcPath);
         }
+
+        const auto srcLog =
+            retrySrcPath.empty() ? dataSyncCfg._path.string() : retrySrcPath;
+
+        lg2::warning(
+            "Retrying sync attempt {RETRY_COUNT}/{MAX_ATTEMPTS} after waiting {INTERVAL}s (exit code {ERROR_CODE}): [{SRC}] → [{DEST}]",
+            "RETRY_COUNT", retryCount + 1, 
+            "MAX_ATTEMPTS", maxAttempts,
+            "INTERVAL", retryIntervalSec, 
+            "ERROR_CODE", ret.first,
+            "SRC", srcLog, 
+            "DEST", dstLog);
+
+        co_await sleep_for(_ctx, std::chrono::seconds(retryIntervalSec));
+
+        co_return co_await syncData(dataSyncCfg, retrySrcPath, destPath,
+                                    retryCount + 1);
     }
 
-    co_return ret.first == 0 ? true : false;
+    lg2::error("Sync failed after {MAX_ATTEMPTS} attempts (exit code {ERROR_CODE}): [{SRC}] → [{DEST}]",
+               "MAX_ATTEMPTS", maxAttempts, 
+               "ERROR_CODE", ret.first,
+               "SRC", srcLog, 
+               "DEST", dstLog);
+
+    co_return false;
 }
 
 sdbusplus::async::task<>
