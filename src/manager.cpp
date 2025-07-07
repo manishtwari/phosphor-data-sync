@@ -151,8 +151,13 @@ sdbusplus::async::task<bool>
     Manager::syncData(const config::DataSyncConfig& dataSyncCfg)
 {
     using namespace std::string_literals;
+
+    // For more details about CLI options, refer rsync man page.
+    // https://download.samba.org/pub/rsync/rsync.1#OPTION_SUMMARY
     std::string syncCmd{
-        "rsync --archive --compress --delete --delete-missing-args"};
+        "rsync --compress --recursive --perms --group --owner --times --atimes"
+        " --update --relative --delete --delete-missing-args "};
+
     syncCmd.append(" "s + dataSyncCfg._path);
 
 #ifdef UNIT_TEST
@@ -161,8 +166,9 @@ sdbusplus::async::task<bool>
     // TODO Support for remote (i,e sibling BMC) copying needs to be added.
 #endif
 
-    // Add destination data path
-    syncCmd.append(dataSyncCfg._destPath.value_or(dataSyncCfg._path));
+    // Add destination data path if configured
+    syncCmd.append(dataSyncCfg._destPath.value_or(fs::path("")));
+
     int result = std::system(syncCmd.c_str()); // NOLINT
     if (result != 0)
     {
