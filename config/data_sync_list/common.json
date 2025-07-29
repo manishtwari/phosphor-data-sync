@@ -41,6 +41,12 @@
             "Description": "System LED persisted data",
             "SyncDirection": "Active2Passive",
             "SyncType": "Immediate"
+        },
+        {
+            "Path": "/etc/credstore.encrypted/",
+            "Description": "Persisted credentials encrypted data",
+            "SyncDirection": "Active2Passive",
+            "SyncType": "Immediate"
         }
     ]
 }
