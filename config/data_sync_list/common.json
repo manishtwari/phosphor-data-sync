@@ -41,6 +41,16 @@
             "Description": "System LED persisted data",
             "SyncDirection": "Active2Passive",
             "SyncType": "Immediate"
+        },
+        {
+            "Path": "/var/lib/pldm/",
+            "Description": "PLDM persisted data",
+            "SyncDirection": "Active2Passive",
+            "SyncType": "Immediate",
+            "IncludeList": [
+                "/var/lib/pldm/pldm_store",
+                "/var/lib/pldm/license/"
+            ]
         }
     ]
 }
