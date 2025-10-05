@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <string>
 
 namespace data_sync::utility
 {
@@ -51,3 +52,16 @@ class FD
 };
 
 } // namespace data_sync::utility
+
+namespace data_sync::retry
+{
+/**
+ * @brief Extract the vanished path parsed from rsync's error output
+ *
+ * @param[in] rsyncCmdOut - rsync output text (stderr)
+ * @return std::string the vanished source path
+ *
+ */
+std::string getVanishedSrcPath(const std::string& rsyncCmdOut);
+
+} // namespace data_sync::retry

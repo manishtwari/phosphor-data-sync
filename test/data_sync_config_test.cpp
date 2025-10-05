@@ -40,7 +40,10 @@ TEST(DataSyncConfigParserTest, TestImmediateFileSyncWithNoRetry)
               data_sync::config::SyncDirection::Active2Passive);
     EXPECT_EQ(dataSyncConfig._syncType, data_sync::config::SyncType::Immediate);
     EXPECT_EQ(dataSyncConfig._periodicityInSec, std::nullopt);
-    EXPECT_EQ(dataSyncConfig._retry, std::nullopt);
+    EXPECT_EQ(dataSyncConfig._retry.value()._retryAttempts,
+              DEFAULT_RETRY_ATTEMPTS);
+    EXPECT_EQ(dataSyncConfig._retry.value()._retryIntervalInSec,
+              std::chrono::seconds(DEFAULT_RETRY_INTERVAL));
     EXPECT_EQ(dataSyncConfig._excludeList, std::nullopt);
     EXPECT_EQ(dataSyncConfig._includeList, std::nullopt);
 }
@@ -107,7 +110,10 @@ TEST(DataSyncConfigParserTest, TestImmediateDirectorySyncWithNoRetry)
               data_sync::config::SyncDirection::Passive2Active);
     EXPECT_EQ(dataSyncConfig._syncType, data_sync::config::SyncType::Immediate);
     EXPECT_EQ(dataSyncConfig._periodicityInSec, std::nullopt);
-    EXPECT_EQ(dataSyncConfig._retry, std::nullopt);
+    EXPECT_EQ(dataSyncConfig._retry.value()._retryAttempts,
+              DEFAULT_RETRY_ATTEMPTS);
+    EXPECT_EQ(dataSyncConfig._retry.value()._retryIntervalInSec,
+              std::chrono::seconds(DEFAULT_RETRY_INTERVAL));
     EXPECT_EQ(dataSyncConfig._excludeList->first,
               configJSON["ExcludeList"].get<std::unordered_set<fs::path>>());
     EXPECT_EQ(dataSyncConfig._excludeList->second,
@@ -141,7 +147,10 @@ TEST(DataSyncConfigParserTest, TestImmediateAndBidirectionalDirectorySync)
               data_sync::config::SyncDirection::Bidirectional);
     EXPECT_EQ(dataSyncConfig._syncType, data_sync::config::SyncType::Immediate);
     EXPECT_EQ(dataSyncConfig._periodicityInSec, std::nullopt);
-    EXPECT_EQ(dataSyncConfig._retry, std::nullopt);
+    EXPECT_EQ(dataSyncConfig._retry.value()._retryAttempts,
+              DEFAULT_RETRY_ATTEMPTS);
+    EXPECT_EQ(dataSyncConfig._retry.value()._retryIntervalInSec,
+              std::chrono::seconds(DEFAULT_RETRY_INTERVAL));
     EXPECT_EQ(dataSyncConfig._excludeList, std::nullopt);
     EXPECT_EQ(dataSyncConfig._includeList, std::nullopt);
 }
@@ -247,7 +256,10 @@ TEST(DataSyncConfigParserTest, TestFileSyncWithInvalidSyncDirection)
               data_sync::config::SyncDirection::Active2Passive);
     EXPECT_EQ(dataSyncConfig._syncType, data_sync::config::SyncType::Immediate);
     EXPECT_EQ(dataSyncConfig._periodicityInSec, std::nullopt);
-    EXPECT_EQ(dataSyncConfig._retry, std::nullopt);
+    EXPECT_EQ(dataSyncConfig._retry.value()._retryAttempts,
+              DEFAULT_RETRY_ATTEMPTS);
+    EXPECT_EQ(dataSyncConfig._retry.value()._retryIntervalInSec,
+              std::chrono::seconds(DEFAULT_RETRY_INTERVAL));
     EXPECT_EQ(dataSyncConfig._excludeList, std::nullopt);
     EXPECT_EQ(dataSyncConfig._includeList, std::nullopt);
 }
@@ -279,7 +291,10 @@ TEST(DataSyncConfigParserTest, TestFileSyncWithInvalidSyncType)
               data_sync::config::SyncDirection::Active2Passive);
     EXPECT_EQ(dataSyncConfig._syncType, data_sync::config::SyncType::Immediate);
     EXPECT_EQ(dataSyncConfig._periodicityInSec, std::nullopt);
-    EXPECT_EQ(dataSyncConfig._retry, std::nullopt);
+    EXPECT_EQ(dataSyncConfig._retry.value()._retryAttempts,
+              DEFAULT_RETRY_ATTEMPTS);
+    EXPECT_EQ(dataSyncConfig._retry.value()._retryIntervalInSec,
+              std::chrono::seconds(DEFAULT_RETRY_INTERVAL));
     EXPECT_EQ(dataSyncConfig._excludeList, std::nullopt);
     EXPECT_EQ(dataSyncConfig._includeList, std::nullopt);
 }
@@ -312,7 +327,10 @@ TEST(DataSyncConfigParserTest, TestFileSyncWithValidDestination)
               data_sync::config::SyncDirection::Active2Passive);
     EXPECT_EQ(dataSyncConfig._syncType, data_sync::config::SyncType::Immediate);
     EXPECT_EQ(dataSyncConfig._periodicityInSec, std::nullopt);
-    EXPECT_EQ(dataSyncConfig._retry, std::nullopt);
+    EXPECT_EQ(dataSyncConfig._retry.value()._retryAttempts,
+              DEFAULT_RETRY_ATTEMPTS);
+    EXPECT_EQ(dataSyncConfig._retry.value()._retryIntervalInSec,
+              std::chrono::seconds(DEFAULT_RETRY_INTERVAL));
     EXPECT_EQ(dataSyncConfig._excludeList, std::nullopt);
     EXPECT_EQ(dataSyncConfig._includeList, std::nullopt);
 }

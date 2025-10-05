@@ -167,9 +167,16 @@ sdbusplus::async::task<> Manager::startSyncEvents()
 sdbusplus::async::task<bool>
     // NOLINTNEXTLINE
     Manager::syncData(const config::DataSyncConfig& dataSyncCfg,
-                      fs::path srcPath)
+                      fs::path srcPath, size_t retryCount)
 {
     using namespace std::string_literals;
+
+    const fs::path currentSrcPath = srcPath.empty() ? dataSyncCfg._path
+                                                    : srcPath;
+
+    const size_t maxAttempts = dataSyncCfg._retry->_retryAttempts;
+    const size_t retryIntervalSec =
+        dataSyncCfg._retry->_retryIntervalInSec.count();
 
     // For more details about CLI options, refer rsync man page.
     // https://download.samba.org/pub/rsync/rsync.1#OPTION_SUMMARY
@@ -213,27 +220,52 @@ sdbusplus::async::task<bool>
     data_sync::async::AsyncCommandExecutor executor(_ctx);
     auto result = co_await executor.execCmd(syncCmd); // NOLINT
     lg2::debug("Rsync cmd output : {OUTPUT}", "OUTPUT", result.second);
-    if (result.first != 0)
+
+    if (result.first == 0)
     {
-        // TODOs:
-        // 1. Retry based on rsync error code
-        // 2. Create error log and Disable redundancy if retry fails
-        // 3. Perform a callout
-
-        // NOTE: The following line is commented out as part of a temporary
-        // workaround. We are forcing Full Sync to succeed even if data syncing
-        // fails. This change should be reverted once proper error handling is
-        // implemented.
-        // setSyncEventsHealth(SyncEventsHealth::Critical);
-
-        lg2::error(
-            "Error syncing [{PATH}], ErrCode : {ERRCODE}, Error : {ERROR}",
-            "PATH", dataSyncCfg._path, "ERRCODE", result.first, "ERROR",
-            result.second);
-
-        co_return false;
+        co_return true;
     }
-    co_return true;
+
+    if (retryCount < maxAttempts)
+    {
+        if (result.first == 24)
+        {
+            auto vanishedPath =
+                data_sync::retry::getVanishedSrcPath(result.second);
+
+            lg2::warning(
+                "exit=24; retry with switching SRC [{OLD}] -> vanishedPath [{NEW}]",
+                "OLD", currentSrcPath, "NEW", vanishedPath);
+
+            co_await sleep_for(_ctx, std::chrono::seconds(retryIntervalSec));
+            co_return co_await syncData(dataSyncCfg, vanishedPath,
+                                        retryCount + 1);
+        }
+        else
+        {
+            lg2::info(
+                "Retry {RETRY_COUNT}/{MAX_ATTEMPTS} (exit={ERROR_CODE}) → [{SRC}]",
+                "RETRY_COUNT", retryCount + 1, "MAX_ATTEMPTS", maxAttempts,
+                "ERROR_CODE", result.first, "SRC", currentSrcPath);
+
+            co_await sleep_for(_ctx, std::chrono::seconds(retryIntervalSec));
+            co_return co_await syncData(dataSyncCfg, currentSrcPath,
+                                        retryCount + 1);
+        }
+    }
+
+    // NOTE: The following line is commented out as part of a temporary
+    // workaround. We are forcing Full Sync to succeed even if data syncing
+    // fails. This change should be reverted once proper error handling is
+    // implemented.
+    // setSyncEventsHealth(SyncEventsHealth::Critical);
+
+    lg2::error(
+        "Sync failed after {MAX_ATTEMPTS} attempts (exit {ERROR_CODE}): [{SRC}]",
+        "MAX_ATTEMPTS", maxAttempts, "ERROR_CODE", result.first, "SRC",
+        currentSrcPath);
+
+    co_return false;
 }
 
 sdbusplus::async::task<>
