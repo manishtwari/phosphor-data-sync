@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include "data_sync_config.hpp"
+
+#include <filesystem>
 #include <string>
+#include <vector>
 
 namespace data_sync::utility
 {
@@ -55,6 +59,7 @@ class FD
 
 namespace data_sync::retry
 {
+namespace fs = std::filesystem;
 /**
  * @brief Extract the vanished path parsed from rsync's error output
  *
@@ -62,6 +67,23 @@ namespace data_sync::retry
  * @return std::string the vanished source path
  *
  */
-std::string getVanishedSrcPath(const std::string& rsyncCmdOut);
+std::vector<std::filesystem::path>
+    getVanishedSrcPaths(const std::string& rsyncCmdOut);
+
+/**
+ * @brief Frame an rsync command that retries only IncludeList entries
+ *        located under the given vanished source paths
+ *
+ *        builds a CLI with '--include' filters for matching IncludeList entries
+ *        and a final '--exclude=*' so only the required paths are retried
+ *
+ * @param[in] cfg - The data sync config
+ * @param[in] vanishedRoots - List of source root paths reported as vanished
+ * @return std::string The framed rsync command line
+ *
+ */
+std::string frameIncludeListCLI(
+    const config::DataSyncConfig& cfg,
+    const std::vector<std::filesystem::path>& vanishedRoots);
 
 } // namespace data_sync::retry

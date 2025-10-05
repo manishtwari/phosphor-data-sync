@@ -167,9 +167,13 @@ sdbusplus::async::task<> Manager::startSyncEvents()
 sdbusplus::async::task<bool>
     // NOLINTNEXTLINE
     Manager::syncData(const config::DataSyncConfig& dataSyncCfg,
-                      fs::path srcPath, size_t retryCount)
+                      fs::path srcPath, std::vector<fs::path> vanishedPaths,
+                      size_t retryCount)
 {
     using namespace std::string_literals;
+
+    const bool haveIncludeList = dataSyncCfg._includeList.has_value() &&
+                                 !dataSyncCfg._includeList->empty();
 
     const fs::path currentSrcPath = srcPath.empty() ? dataSyncCfg._path
                                                     : srcPath;
@@ -192,6 +196,13 @@ sdbusplus::async::task<bool>
     if (!srcPath.empty())
     {
         syncCmd.append(" "s + srcPath.string());
+    }
+    else if (!vanishedPaths.empty())
+    {
+        // framed include-list (built from vanished roots)
+        const std::string framedIncludeListCmd =
+            data_sync::retry::frameIncludeListCLI(dataSyncCfg, vanishedPaths);
+        syncCmd += framedIncludeListCmd;
     }
     else if ((dataSyncCfg._includeList.has_value()) && (srcPath.empty()))
     {
@@ -228,17 +239,43 @@ sdbusplus::async::task<bool>
 
     if (retryCount < maxAttempts)
     {
+        if (haveIncludeList)
+        {
+            if (result.first == 24)
+            {
+                auto vanishedPaths =
+                    data_sync::retry::getVanishedSrcPaths(result.second);
+                lg2::warning(
+                    "exit=24; switching to framed include-list retry with {NUM} root(s).",
+                    "NUM", vanishedPaths.size());
+                co_await sleep_for(_ctx,
+                                   std::chrono::seconds(retryIntervalSec));
+                co_return co_await syncData(dataSyncCfg, fs::path{},
+                                            std::move(vanishedPaths),
+                                            retryCount + 1);
+            }
+
+            lg2::info(
+                "Retry {RETRY_COUNT}/{MAX_ATTEMPTS} (exit={ERROR_CODE}) retrying with same include list",
+                "RETRY_COUNT", retryCount + 1, "MAX_ATTEMPTS", maxAttempts,
+                "ERROR_CODE", result.first);
+            co_await sleep_for(_ctx, std::chrono::seconds(retryIntervalSec));
+            co_return co_await syncData(dataSyncCfg, fs::path{},
+                                        std::move(vanishedPaths),
+                                        retryCount + 1);
+        }
         if (result.first == 24)
         {
-            auto vanishedPath =
-                data_sync::retry::getVanishedSrcPath(result.second);
+            auto vanished =
+                data_sync::retry::getVanishedSrcPaths(result.second);
+            const fs::path& nextSrc = vanished.front();
 
             lg2::warning(
                 "exit=24; retry with switching SRC [{OLD}] -> vanishedPath [{NEW}]",
-                "OLD", currentSrcPath, "NEW", vanishedPath);
+                "OLD", currentSrcPath, "NEW", nextSrc);
 
             co_await sleep_for(_ctx, std::chrono::seconds(retryIntervalSec));
-            co_return co_await syncData(dataSyncCfg, vanishedPath,
+            co_return co_await syncData(dataSyncCfg, nextSrc, {},
                                         retryCount + 1);
         }
         else
@@ -249,7 +286,7 @@ sdbusplus::async::task<bool>
                 "ERROR_CODE", result.first, "SRC", currentSrcPath);
 
             co_await sleep_for(_ctx, std::chrono::seconds(retryIntervalSec));
-            co_return co_await syncData(dataSyncCfg, currentSrcPath,
+            co_return co_await syncData(dataSyncCfg, currentSrcPath, {},
                                         retryCount + 1);
         }
     }
@@ -259,12 +296,20 @@ sdbusplus::async::task<bool>
     // fails. This change should be reverted once proper error handling is
     // implemented.
     // setSyncEventsHealth(SyncEventsHealth::Critical);
-
-    lg2::error(
-        "Sync failed after {MAX_ATTEMPTS} attempts (exit {ERROR_CODE}): [{SRC}]",
-        "MAX_ATTEMPTS", maxAttempts, "ERROR_CODE", result.first, "SRC",
-        currentSrcPath);
-
+    if (haveIncludeList)
+    {
+        lg2::error(
+            "Sync failed after {MAX_ATTEMPTS} attempts (exit {ERROR_CODE}); include_paths={INC_NUM}; vanished_roots={VAN_NUM}",
+            "MAX_ATTEMPTS", maxAttempts, "ERROR_CODE", result.first, "INC_NUM",
+            dataSyncCfg._includeList->size(), "VAN_NUM", vanishedPaths.size());
+    }
+    else
+    {
+        lg2::error(
+            "Sync failed after {MAX_ATTEMPTS} attempts (exit {ERROR_CODE}): [{SRC}]",
+            "MAX_ATTEMPTS", maxAttempts, "ERROR_CODE", result.first, "SRC",
+            currentSrcPath);
+    }
     co_return false;
 }
 
