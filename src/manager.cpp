@@ -182,6 +182,20 @@ sdbusplus::async::task<bool>
     const size_t retryIntervalSec =
         dataSyncCfg._retry->_retryIntervalInSec.count();
 
+    // On first try only, if this path is already in retry/syncing, skip that
+    if (retryCount == 0)
+    {
+        if (dataSyncCfg._syncInProgressPaths.count(currentSrcPath) != 0U)
+        {
+            lg2::debug(
+                "Skipping sync for [{SRC}]: a sync is already in progress",
+                "SRC", currentSrcPath);
+            co_return true;
+        }
+        // Mark the path as in-progress so subsequent retries know to skip it
+        dataSyncCfg._syncInProgressPaths.insert(currentSrcPath);
+    }
+
     // For more details about CLI options, refer rsync man page.
     // https://download.samba.org/pub/rsync/rsync.1#OPTION_SUMMARY
     std::string syncCmd{
@@ -234,6 +248,8 @@ sdbusplus::async::task<bool>
 
     if (result.first == 0)
     {
+        // Remove from in-progress after completing sync successfully
+        dataSyncCfg._syncInProgressPaths.erase(currentSrcPath);
         co_return true;
     }
 
@@ -296,6 +312,10 @@ sdbusplus::async::task<bool>
     // fails. This change should be reverted once proper error handling is
     // implemented.
     // setSyncEventsHealth(SyncEventsHealth::Critical);
+
+    // Remove from in-progress after completing all sync attempts
+    dataSyncCfg._syncInProgressPaths.erase(currentSrcPath);
+
     if (haveIncludeList)
     {
         lg2::error(
