@@ -170,6 +170,11 @@ sdbusplus::async::task<bool>
                       fs::path srcPath, std::vector<fs::path> vanishedPaths,
                       size_t retryCount)
 {
+    if (_syncBMCDataIface.disable_sync())
+    {
+        co_return false;
+    }
+
     using namespace std::string_literals;
 
     const bool haveIncludeList = dataSyncCfg._includeList.has_value() &&
