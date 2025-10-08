@@ -1096,3 +1096,236 @@ TEST_F(ManagerTest, FullSyncA2PWithIncludeListsTest)
     EXPECT_EQ(manager.getSyncEventsHealth(), SyncEventsHealth::Ok)
         << "SyncEventsHealth should be Ok after full sync completes successfully.";
 }
+
+// Full sync retry target (data1/data2/srcFile2) is missing
+// Manager retries at the parent path, and copies existing data
+TEST_F(ManagerTest, FullSyncWithRetryTest)
+{
+    using namespace std::literals;
+    namespace ed = data_sync::ext_data;
+
+    std::unique_ptr<ed::ExternalDataIFaces> extDataIface =
+        std::make_unique<ed::MockExternalDataIFaces>();
+    auto* mockIfaces =
+        dynamic_cast<ed::MockExternalDataIFaces*>(extDataIface.get());
+
+    ON_CALL(*mockIfaces, fetchBMCRedundancyMgrProps())
+        // NOLINTNEXTLINE
+        .WillByDefault([&mockIfaces]() -> sdbusplus::async::task<> {
+        mockIfaces->setBMCRole(ed::BMCRole::Active);
+        mockIfaces->setBMCRedundancy(true);
+        co_return;
+    });
+    EXPECT_CALL(*mockIfaces, fetchSiblingBmcIP())
+        // NOLINTNEXTLINE
+        .WillRepeatedly([]() -> sdbusplus::async::task<> { co_return; });
+    EXPECT_CALL(*mockIfaces, fetchRbmcCredentials())
+        // NOLINTNEXTLINE
+        .WillRepeatedly([]() -> sdbusplus::async::task<> { co_return; });
+
+    // Source tree
+    //   srcBaseDir/
+    //     data1/
+    //       dataFile (exists)
+    //       data2/ (will not create this)
+    //         srcFile2 (will not create this)
+    const fs::path srcBaseDir = ManagerTest::tmpDataSyncDataDir / "dataDir";
+    const fs::path srcData1Dir = srcBaseDir / "data1";
+    const fs::path srcData2Dir = srcData1Dir / "data2";
+    const fs::path srcDataFile = srcData1Dir / "dataFile";
+    const fs::path srcMissingFile = srcData1Dir / "data2" / "srcFile2";
+    const fs::path dstBaseDir = ManagerTest::destDir;
+
+    std::filesystem::create_directories(srcData1Dir);
+
+    const std::string srcFileContent{"dataFile content \n"};
+    ManagerTest::writeData(srcDataFile, srcFileContent);
+
+    ASSERT_EQ(ManagerTest::readData(srcDataFile), srcFileContent);
+    ASSERT_FALSE(std::filesystem::exists(srcData2Dir));
+    ASSERT_FALSE(std::filesystem::exists(srcMissingFile));
+
+    nlohmann::json cfgJson = {
+        {"Files",
+         {{{"Path", srcMissingFile.string()},
+           {"DestinationPath", dstBaseDir.string()},
+           {"Description", "FullSync from Active to Passive bmc"},
+           {"SyncDirection", "Active2Passive"},
+           {"RetryAttempts", 3},
+           {"RetryInterval", "PT1S"},
+           {"SyncType", "Immediate"}}}}};
+    writeConfig(cfgJson);
+
+    sdbusplus::async::context ctx;
+    data_sync::Manager manager{ctx, std::move(extDataIface),
+                               ManagerTest::dataSyncCfgDir};
+    manager.setSyncEventsHealth(SyncEventsHealth::Critical);
+
+    auto waitingForFullSyncToFinish =
+        // NOLINTNEXTLINE
+        [&](sdbusplus::async::context& ctx) -> sdbusplus::async::task<void> {
+        auto status = manager.getFullSyncStatus();
+        while (status != FullSyncStatus::FullSyncCompleted &&
+               status != FullSyncStatus::FullSyncFailed)
+        {
+            co_await sdbusplus::async::sleep_for(ctx,
+                                                 std::chrono::milliseconds(50));
+            status = manager.getFullSyncStatus();
+        }
+
+        EXPECT_EQ(status, FullSyncStatus::FullSyncCompleted)
+            << "FullSync should succeed via parent path retry";
+
+        const fs::path dstMissingLeaf = dstBaseDir /
+                                        fs::relative(srcMissingFile, "/");
+        const fs::path dstData1Dir = dstBaseDir /
+                                     fs::relative(srcData1Dir, "/");
+
+        EXPECT_TRUE(std::filesystem::exists(dstData1Dir))
+            << "Expected parent directory to be copied at destination";
+
+        EXPECT_FALSE(std::filesystem::exists(dstMissingLeaf))
+            << "Missing child must not appear at destination";
+
+        co_await sdbusplus::async::sleep_for(ctx,
+                                             std::chrono::milliseconds(30));
+        ctx.request_stop();
+
+        // Forcing to trigger inotify events so that all running immediate
+        // sync tasks will resume and stop since the context is requested to
+        // stop in the above.
+        ManagerTest::writeData(srcDataFile, srcFileContent);
+        co_return;
+    };
+
+    ctx.spawn(waitingForFullSyncToFinish(ctx));
+    ctx.run();
+
+    EXPECT_EQ(manager.getSyncEventsHealth(), SyncEventsHealth::Ok)
+        << "Health should be Ok after the retry";
+}
+
+// Full sync with IncludeList some included paths are initially missing
+// Verifies retry behavior copies only the includedList
+TEST_F(ManagerTest, FullSyncWithIncludeListsRetryTest)
+{
+    using namespace std::literals;
+    namespace ed = data_sync::ext_data;
+
+    std::unique_ptr<ed::ExternalDataIFaces> extIfaces =
+        std::make_unique<ed::MockExternalDataIFaces>();
+    auto* mock = dynamic_cast<ed::MockExternalDataIFaces*>(extIfaces.get());
+
+    ON_CALL(*mock, fetchBMCRedundancyMgrProps())
+        // NOLINTNEXTLINE
+        .WillByDefault([&mock]() -> sdbusplus::async::task<> {
+        mock->setBMCRole(ed::BMCRole::Active);
+        mock->setBMCRedundancy(true);
+        co_return;
+    });
+    EXPECT_CALL(*mock, fetchSiblingBmcIP())
+        // NOLINTNEXTLINE
+        .WillRepeatedly([]() -> sdbusplus::async::task<> { co_return; });
+    EXPECT_CALL(*mock, fetchRbmcCredentials())
+        // NOLINTNEXTLINE
+        .WillRepeatedly([]() -> sdbusplus::async::task<> { co_return; });
+
+    const fs::path srcBaseDir = ManagerTest::tmpDataSyncDataDir;
+    const fs::path srcFile1 = srcBaseDir / "srcFile1";
+    const fs::path srcDir = srcBaseDir / "srcDir";
+    const fs::path includeMissingDir = srcDir / "subDir1/subDirFile1";
+    const fs::path includeMissingFile = srcDir / "dirFile1";
+    const fs::path notIncludedDir = srcDir / "subDir2/subDirFile1";
+    const fs::path notIncludedFile = notIncludedDir / "text.txt";
+    const fs::path dstBaseDir = ManagerTest::destDir;
+
+    std::filesystem::create_directories(srcDir);
+    std::filesystem::create_directories(notIncludedDir);
+
+    const std::string file1{"srcFile1 \n"};
+    const std::string file2{"should not be copied by IncludeList \n"};
+
+    ManagerTest::writeData(srcFile1, file1);
+    ManagerTest::writeData(notIncludedFile, file2);
+
+    ASSERT_EQ(ManagerTest::readData(srcFile1), file1);
+    ASSERT_TRUE(std::filesystem::exists(notIncludedFile));
+    ASSERT_FALSE(std::filesystem::exists(includeMissingDir));
+    ASSERT_FALSE(std::filesystem::exists(includeMissingFile));
+
+    nlohmann::json jsonData = {
+        {"Files",
+         {{{"Path", srcFile1.string()},
+           {"DestinationPath", dstBaseDir.string()},
+           {"Description", "FullSync from Active to Passive bmc"},
+           {"SyncDirection", "Active2Passive"},
+           {"SyncType", "Immediate"},
+           {"RetryAttempts", 3},
+           {"RetryInterval", "PT5S"}}}},
+        {"Directories",
+         {{{"Path", (srcDir.string() + "/")},
+           {"DestinationPath", dstBaseDir.string()},
+           {"Description", "FullSync from A2P with include list"},
+           {"SyncDirection", "Active2Passive"},
+           {"SyncType", "Immediate"},
+           {"RetryAttempts", 3},
+           {"RetryInterval", "PT1S"},
+           {"IncludeList",
+            {(includeMissingDir.string() + "/"),
+             includeMissingFile.string()}}}}}};
+
+    writeConfig(jsonData);
+
+    sdbusplus::async::context ctx;
+    data_sync::Manager manager{ctx, std::move(extIfaces),
+                               ManagerTest::dataSyncCfgDir};
+    manager.setSyncEventsHealth(SyncEventsHealth::Critical);
+
+    auto waitingForFullSyncToFinish =
+        // NOLINTNEXTLINE
+        [&](sdbusplus::async::context& ctx) -> sdbusplus::async::task<void> {
+        auto status = manager.getFullSyncStatus();
+        while (status != FullSyncStatus::FullSyncCompleted &&
+               status != FullSyncStatus::FullSyncFailed)
+        {
+            co_await sdbusplus::async::sleep_for(ctx,
+                                                 std::chrono::milliseconds(50));
+            status = manager.getFullSyncStatus();
+        }
+
+        EXPECT_EQ(status, FullSyncStatus::FullSyncCompleted)
+            << "FullSync should complete even if IncludeList entries are missing";
+
+        const fs::path dstFile1 = dstBaseDir / fs::relative(srcFile1, "/");
+        EXPECT_EQ(ManagerTest::readData(dstFile1), file1);
+
+        const fs::path dstStray = dstBaseDir /
+                                  fs::relative(notIncludedFile, "/");
+        EXPECT_FALSE(std::filesystem::exists(dstStray));
+
+        const fs::path dstIncMissingDir = dstBaseDir /
+                                          fs::relative(includeMissingDir, "/");
+        const fs::path dstIncMissingFile =
+            dstBaseDir / fs::relative(includeMissingFile, "/");
+        EXPECT_FALSE(std::filesystem::exists(dstIncMissingDir));
+        EXPECT_FALSE(std::filesystem::exists(dstIncMissingFile));
+
+        co_await sdbusplus::async::sleep_for(ctx,
+                                             std::chrono::milliseconds(30));
+        ctx.request_stop();
+
+        // Forcing to trigger inotify events so that all running immediate
+        // sync tasks will resume and stop since the context is requested to
+        // stop in the above.
+        ManagerTest::writeData(srcFile1, file1);
+        ManagerTest::writeData(notIncludedFile, file2);
+
+        co_return;
+    };
+
+    ctx.spawn(waitingForFullSyncToFinish(ctx));
+    ctx.run();
+
+    EXPECT_EQ(manager.getSyncEventsHealth(), SyncEventsHealth::Ok)
+        << "Health should be Ok after selective IncludeList sync";
+}
