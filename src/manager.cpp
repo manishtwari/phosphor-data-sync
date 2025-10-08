@@ -244,7 +244,8 @@ sdbusplus::async::task<bool>
 
     // Add destination data path if configured
     // TODO: Change the default destPath to empty once remote sync is enabled.
-    syncCmd.append(dataSyncCfg._destPath.value_or(fs::path(" /")).string());
+    syncCmd.append(" "s +
+                   dataSyncCfg._destPath.value_or(fs::path("/")).string());
     lg2::debug("RSYNC CMD : {CMD}", "CMD", syncCmd);
 
     data_sync::async::AsyncCommandExecutor executor(_ctx);
@@ -312,11 +313,9 @@ sdbusplus::async::task<bool>
         }
     }
 
-    // NOTE: The following line is commented out as part of a temporary
-    // workaround. We are forcing Full Sync to succeed even if data syncing
-    // fails. This change should be reverted once proper error handling is
-    // implemented.
-    // setSyncEventsHealth(SyncEventsHealth::Critical);
+    // If we reach here, all retry attempts have been exhausted
+    // Mark sync events health as critical
+    setSyncEventsHealth(SyncEventsHealth::Critical);
 
     // Remove from in-progress after completing all sync attempts
     dataSyncCfg._syncInProgressPaths.erase(currentSrcPath);
@@ -519,15 +518,8 @@ sdbusplus::async::task<void> Manager::startFullSync()
     }
     else
     {
-        // Forcefully marking full sync as successful, even if data syncing
-        // fails.
-        // TODO: Revert this workaround once the proper logic is implemented
-        setFullSyncStatus(FullSyncStatus::FullSyncCompleted);
-        setSyncEventsHealth(SyncEventsHealth::Ok);
-        lg2::info("Full Sync passed temporarily despite sync failures");
-
-        // setFullSyncStatus(FullSyncStatus::FullSyncFailed);
-        // lg2::info("Full Sync failed");
+        setFullSyncStatus(FullSyncStatus::FullSyncFailed);
+        lg2::info("Full Sync failed");
     }
 
     // total duration/time diff of the Full Sync operation
