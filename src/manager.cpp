@@ -330,11 +330,9 @@ sdbusplus::async::task<bool>
         co_return co_await syncData(cfg, std::move(srcPath), retryCount);
     }
 
-    // NOTE: The following line is commented out as part of a temporary
-    // workaround. We are forcing Full Sync to succeed even if data syncing
-    // fails. This change should be reverted once proper error handling is
-    // implemented.
-    // setSyncEventsHealth(SyncEventsHealth::Critical);
+    // All retry attempts exhausted, mark sync event health as critical
+    setSyncEventsHealth(SyncEventsHealth::Critical);
+
     lg2::error("Sync failed after [{MAX_ATTEMPTS}] retries for [{SRC_PATH}]",
                "MAX_ATTEMPTS", cfg._retry->_retryAttempts, "SRC_PATH",
                currentSrcPath);
@@ -628,15 +626,8 @@ sdbusplus::async::task<void> Manager::startFullSync()
     }
     else
     {
-        // Forcefully marking full sync as successful, even if data syncing
-        // fails.
-        // TODO: Revert this workaround once the proper logic is implemented
-        setFullSyncStatus(FullSyncStatus::FullSyncCompleted);
-        setSyncEventsHealth(SyncEventsHealth::Ok);
-        lg2::info("Full Sync passed temporarily despite sync failures");
-
-        // setFullSyncStatus(FullSyncStatus::FullSyncFailed);
-        // lg2::info("Full Sync failed");
+        setFullSyncStatus(FullSyncStatus::FullSyncFailed);
+        lg2::info("Full Sync failed");
     }
 
     // total duration/time diff of the Full Sync operation
