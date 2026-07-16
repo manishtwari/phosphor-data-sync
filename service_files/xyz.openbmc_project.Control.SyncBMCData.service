@@ -2,6 +2,9 @@
 Description=Redundant BMC Data Synchronization
 Wants=xyz.openbmc_project.State.BMC.Redundancy.service
 After=xyz.openbmc_project.State.BMC.Redundancy.service
+# TODO: Move this OpenPOWER-specific ordering when
+# data-sync is upstreamed.
+After=openpower-update-bios-attr-table.service
 
 [Service]
 ExecStart=/usr/libexec/phosphor-data-sync/phosphor-rbmc-data-sync-mgr
