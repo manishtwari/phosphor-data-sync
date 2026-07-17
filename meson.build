@@ -119,6 +119,12 @@ conf_data.set_quoted(
     description: 'BMC1 rsyncd port',
 )
 
+conf_data.set_quoted(
+    'BMC_POSITION_FILE',
+    '/run/openbmc/bmc_position',
+    description: 'Runtime file that holds the local BMC position',
+)
+
 conf_h_dep = declare_dependency(
     include_directories: include_directories('.'),
     sources: configure_file(output: 'config.h', configuration: conf_data),

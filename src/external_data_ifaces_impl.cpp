@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include "config.h"
+
 #include "external_data_ifaces_impl.hpp"
 
 #include "error_log.hpp"
 
 #include <phosphor-logging/lg2.hpp>
-#include <xyz/openbmc_project/Inventory/Decorator/Position/client.hpp>
 #include <xyz/openbmc_project/Logging/Create/client.hpp>
-#include <xyz/openbmc_project/ObjectMapper/client.hpp>
 #include <xyz/openbmc_project/State/BMC/Redundancy/client.hpp>
+
+#include <fstream>
 
 namespace data_sync::ext_data
 {
@@ -16,36 +18,6 @@ namespace data_sync::ext_data
 ExternalDataIFacesImpl::ExternalDataIFacesImpl(sdbusplus::async::context& ctx) :
     _ctx(ctx)
 {}
-
-sdbusplus::async::task<std::string>
-    // NOLINTNEXTLINE
-    ExternalDataIFacesImpl::getDBusService(const std::string& objPath,
-                                           const std::string& interface)
-{
-    try
-    {
-        using ObjectMapperMgr =
-            sdbusplus::client::xyz::openbmc_project::ObjectMapper<>;
-
-        auto objectMapperMgr = ObjectMapperMgr(_ctx)
-                                   .service(ObjectMapperMgr::default_service)
-                                   .path(ObjectMapperMgr::instance_path);
-
-        std::vector<std::string> interfaces{interface};
-
-        auto services = co_await objectMapperMgr.get_object(objPath,
-                                                            interfaces);
-
-        co_return services.begin()->first;
-    }
-    catch (const std::exception& e)
-    {
-        lg2::error("D-Bus error [{ERROR}] while trying to get service name for "
-                   "ObjectPath: {OBJ_PATH} Interface: {IFACE}",
-                   "ERROR", e, "OBJ_PATH", objPath, "IFACE", interface);
-        throw;
-    }
-}
 
 // NOLINTNEXTLINE
 sdbusplus::async::task<> ExternalDataIFacesImpl::fetchBMCRedundancyMgrProps()
@@ -77,22 +49,23 @@ sdbusplus::async::task<> ExternalDataIFacesImpl::fetchBMCPosition()
 {
     try
     {
-        // In a redundant BMC system, the local BMC position is maintained
-        // in the system inventory.
-        using PositionMgr = sdbusplus::client::xyz::openbmc_project::inventory::
-            decorator::Position<>;
+        std::ifstream posFile(BMC_POSITION_FILE);
+        if (!posFile.is_open())
+        {
+            throw std::runtime_error(std::string("Cannot open ") +
+                                     BMC_POSITION_FILE);
+        }
 
-        const auto* const systemInvObjPath =
-            "/xyz/openbmc_project/inventory/system";
+        BMCPosition pos{};
+        if (!(posFile >> pos))
+        {
+            throw std::runtime_error(
+                std::string("Invalid BMC position value in ") +
+                BMC_POSITION_FILE);
+        }
 
-        // NOLINTNEXTLINE
-        auto service = co_await getDBusService(systemInvObjPath,
-                                               PositionMgr::interface);
-
-        bmcPosition(co_await PositionMgr(_ctx)
-                        .service(service)
-                        .path(systemInvObjPath)
-                        .position());
+        bmcPosition(pos);
+        lg2::debug("BMC position read from file: {POSITION}", "POSITION", pos);
     }
     catch (const std::exception& e)
     {
