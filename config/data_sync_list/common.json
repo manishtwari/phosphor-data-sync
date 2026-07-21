@@ -22,7 +22,8 @@
                 "/var/lib/phosphor-state-manager/requestedHostTransition",
                 "/var/lib/phosphor-state-manager/POHCounter",
                 "/var/lib/phosphor-state-manager/chassisStateChangeTime",
-                "/var/lib/phosphor-state-manager/redundant-bmc/data.json"
+                "/var/lib/phosphor-state-manager/redundant-bmc/data.json",
+                "/var/lib/phosphor-state-manager/redundant-bmc/wait_status.json"
             ]
         },
         {
