@@ -3,6 +3,7 @@
 #include "config_options.hpp"
 #include "dbus_interactions.hpp"
 #include "error_summary.hpp"
+#include "test_sync.hpp"
 
 #include <CLI/CLI.hpp>
 #include <sdbusplus/async.hpp>
@@ -18,7 +19,8 @@ int main(int argc, char* argv[])
         app.add_option_group("Full Sync", "Trigger a full sync to the sibling");
 
     bool fullSync{false};
-    fullSyncGroup->add_flag("-f,--fullSync", fullSync, "Start a full sync");
+    auto* fullSyncOpt = fullSyncGroup->add_flag("-f,--fullSync", fullSync,
+                                                "Start a full sync");
 
     auto* statusGroup = app.add_option_group(
         "Status Display", "Display current status of phosphor-data-sync");
@@ -58,11 +60,21 @@ int main(int argc, char* argv[])
             ->default_val(1);
 
     bool includeTrace{false};
-    auto* traceOpt = errorGroup->add_flag(
+    errorGroup->add_flag(
         "-T,--trace", includeTrace,
-        "Include datasync trace lines in each sync failure log entry.\n"
-        "Only valid with -S/--syncFailure.");
-    traceOpt->needs(errorLogOpt);
+        "Include trace lines in sync failure or failed test sync output.\n"
+        "Only valid with -S/--syncFailure or -t/--testSync.");
+
+    auto* testSyncGroup = app.add_option_group(
+        "Test Sync", "Test the rsync/stunnel setup with a dry-run sync");
+
+    bool testSync{false};
+    auto* testSyncOpt = testSyncGroup->add_flag(
+        "-t,--testSync", testSync, "Run a dry-run sync to the sibling BMC");
+    testSyncOpt->excludes(errorLogOpt);
+    testSyncOpt->excludes(fullSyncOpt);
+    testSyncOpt->excludes(enableOpt);
+    testSyncOpt->excludes(disableOpt);
 
     auto* configGroup = app.add_option_group("Config options",
                                              "Configuration related options");
@@ -95,6 +107,15 @@ int main(int argc, char* argv[])
     }
 
     CLI11_PARSE(app, argc, argv);
+
+    // CLI11's needs() requires every listed option, while trace is valid with
+    // either a PEL summary or a live test sync.
+    if (includeTrace && errorLogOpt->count() == 0U && !testSync)
+    {
+        std::println(stderr, "--trace requires --syncFailure or --testSync");
+        std::println(stderr, "Run with --help for more information.");
+        return 1;
+    }
 
     sdbusplus::async::context ctx;
 
@@ -138,6 +159,11 @@ int main(int argc, char* argv[])
     {
         ctx.spawn(
             datasynctool::dbus_interactions::displayStatus(ctx, jsonOutput));
+    }
+
+    if (testSync)
+    {
+        ctx.spawn(datasynctool::test_sync::run(ctx, jsonOutput, includeTrace));
     }
 
     if (fullSync)

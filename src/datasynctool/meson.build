@@ -6,10 +6,12 @@ cli11_dep = dependency('CLI11')
 # Build datasynctool executable
 
 datasynctool_sources = files(
+    '../utility.cpp',
     'config_options.cpp',
     'dbus_interactions.cpp',
     'error_summary.cpp',
     'main.cpp',
+    'test_sync.cpp',
     'utils.cpp',
 )
 
@@ -26,7 +28,7 @@ executable(
     'datasynctool',
     datasynctool_sources,
     dependencies: datasynctool_dependencies,
-    include_directories: include_directories('.'),
+    include_directories: include_directories('.', '..'),
     install: true,
     install_dir: get_option('bindir'),
 )
