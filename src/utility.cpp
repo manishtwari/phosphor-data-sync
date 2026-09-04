@@ -9,7 +9,10 @@
 #include <phosphor-logging/lg2.hpp>
 
 #include <filesystem>
+#include <fstream>
+#include <limits>
 #include <regex>
+#include <stdexcept>
 #include <utility>
 
 namespace data_sync::utility
@@ -93,6 +96,27 @@ void setupPaths()
                                      notifyServiceDir.string());
         }
     }
+}
+
+std::size_t readBMCPosition()
+{
+    constexpr auto bmcPositionFile = "/run/openbmc/bmc_position";
+    std::ifstream posFile(bmcPositionFile);
+    if (!posFile.is_open())
+    {
+        throw std::runtime_error(std::string("Cannot open ") + bmcPositionFile);
+    }
+
+    std::size_t position{};
+    // max<size_t>() indicates that the BMC position could not be determined.
+    if (!(posFile >> position) ||
+        position == std::numeric_limits<std::size_t>::max())
+    {
+        throw std::runtime_error(std::string("Invalid BMC position in ") +
+                                 bmcPositionFile);
+    }
+
+    return position;
 }
 
 namespace rsync

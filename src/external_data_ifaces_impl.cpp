@@ -3,18 +3,14 @@
 #include "external_data_ifaces_impl.hpp"
 
 #include "error_log.hpp"
+#include "utility.hpp"
 
 #include <phosphor-logging/lg2.hpp>
 #include <xyz/openbmc_project/Logging/Create/client.hpp>
 #include <xyz/openbmc_project/State/BMC/Redundancy/client.hpp>
 
-#include <fstream>
-#include <limits>
-
 namespace data_sync::ext_data
 {
-
-constexpr auto bmcPositionFile = "/run/openbmc/bmc_position";
 
 ExternalDataIFacesImpl::ExternalDataIFacesImpl(sdbusplus::async::context& ctx) :
     _ctx(ctx)
@@ -48,22 +44,9 @@ sdbusplus::async::task<> ExternalDataIFacesImpl::fetchBMCRedundancyMgrProps()
 // NOLINTNEXTLINE
 sdbusplus::async::task<> ExternalDataIFacesImpl::fetchBMCPosition()
 {
-    std::ifstream posFile(bmcPositionFile);
-    if (!posFile.is_open())
-    {
-        throw std::runtime_error(std::string("Cannot open ") + bmcPositionFile);
-    }
-
-    BMCPosition pos{};
-    // max<size_t>() indicates that the BMC position could not be determined.
-    if (!(posFile >> pos) || pos == std::numeric_limits<BMCPosition>::max())
-    {
-        throw std::runtime_error(std::string("Invalid BMC position in ") +
-                                 bmcPositionFile);
-    }
-
-    bmcPosition(pos);
-    lg2::debug("BMC position read from file: {POSITION}", "POSITION", pos);
+    bmcPosition(utility::readBMCPosition());
+    lg2::debug("BMC position read from file: {POSITION}", "POSITION",
+               bmcPosition());
 
     co_return;
 }

@@ -67,6 +67,15 @@ class FD
  */
 void setupPaths();
 
+/**
+ * @brief Read the BMC position from /run/openbmc/bmc_position.
+ *
+ * @return BMC position
+ *
+ * @throws std::runtime_error if the position cannot be read
+ */
+std::size_t readBMCPosition();
+
 namespace rsync
 {
 /**
