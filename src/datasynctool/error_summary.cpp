@@ -3,23 +3,18 @@
 #include "error_summary.hpp"
 
 #include "err_reason_rules.hpp"
-
-#include <sys/wait.h>
+#include "utils.hpp"
 
 #include <nlohmann/json.hpp>
 
-#include <array>
-#include <cerrno>
 #include <cstdio>
 #include <format>
 #include <map>
 #include <optional>
 #include <print>
 #include <ranges>
-#include <span>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <vector>
 
 namespace datasynctool::error_summary
@@ -34,9 +29,6 @@ constexpr std::string_view datasyncSrcPrefix = "BD8D70";
 
 constexpr std::string_view separator =
     "─────────────────────────────────────────────────";
-
-// Read buffer for popen output
-constexpr std::size_t readBufSize = 4096;
 
 // Registry message map
 static const std::map<std::string_view, std::string_view> srcRegistryMap = {
@@ -62,41 +54,6 @@ static constexpr PelField fieldRsyncErrMsg = {"User Data 1", "DS_Sync_ErrMsg",
                                               "RsyncErrMsg"};
 static constexpr PelField fieldRsyncErrCode = {"User Data 1", "DS_Sync_ErrCode",
                                                "RsyncErrCode"};
-
-static std::optional<std::string> runCommand(std::string_view cmd)
-{
-    // NOLINTNEXTLINE
-    FILE* pipe = popen(std::string(cmd).c_str(), "r");
-    if (pipe == nullptr)
-    {
-        std::println(stderr, "popen failed for command: {}", cmd);
-        return std::nullopt;
-    }
-
-    std::string output;
-    output.reserve(readBufSize);
-    std::array<char, readBufSize> buf{};
-    std::size_t n = 0;
-    while ((n = std::fread(buf.data(), 1, buf.size(), pipe)) > 0)
-    {
-        const auto chunk = std::span(buf).first(n);
-        output.append(chunk.begin(), chunk.end());
-    }
-
-    const int status = pclose(pipe);
-    if (status == -1)
-    {
-        std::println(stderr, "pclose failed: {}",
-                     std::system_category().message(errno));
-    }
-    else if (WIFEXITED(status) && WEXITSTATUS(status) != 0)
-    {
-        std::println(stderr, "peltool.py exited with code {}",
-                     WEXITSTATUS(status));
-    }
-
-    return output;
-}
 
 // Extract a string value from a PEL JSON object using a PelField descriptor.
 // Returns an empty string if the parent section or child key is absent.
@@ -214,11 +171,17 @@ sdbusplus::async::task<> displayErrorLogSummary(bool jsonOutput,
                                                 std::size_t limit,
                                                 bool includeTrace)
 {
-    const auto output = runCommand(std::format(
+    const auto [exitCode, output] = utils::runCommand(std::format(
         "peltool.py --src {} --reverse {} --all-pels --skip-parser-plugins ",
         datasyncSrcPrefix, limit));
 
-    if (!output.has_value() || output->empty())
+    if (exitCode != 0)
+    {
+        std::println(stderr, "peltool.py exited with code {}", exitCode);
+        co_return;
+    }
+
+    if (output.empty())
     {
         std::println("peltool.py returned no output for SRC prefix {}",
                      datasyncSrcPrefix);
@@ -228,7 +191,7 @@ sdbusplus::async::task<> displayErrorLogSummary(bool jsonOutput,
     json pelMap;
     try
     {
-        pelMap = json::parse(*output);
+        pelMap = json::parse(output);
     }
     catch (const json::exception& e)
     {
@@ -265,25 +228,7 @@ sdbusplus::async::task<> displayErrorLogSummary(bool jsonOutput,
             obj[fieldRegistryMsg.displayName] = e.registryMsg;
             obj[fieldFailureTime.displayName] = e.failureTime;
             obj[fieldPelId.displayName] = e.pelId;
-            if (!e.path.empty() || !e.rsyncErrMsg.empty() ||
-                !e.rsyncErrCode.empty())
-            {
-                obj[fieldPath.displayName] = e.path;
-                if (!e.errReason.empty())
-                {
-                    obj["ErrorReason"] = e.errReason;
-                    if (!e.errCauses.empty())
-                    {
-                        obj["PossibleCauses"] = e.errCauses;
-                    }
-                    if (!e.errVerify.empty())
-                    {
-                        obj["Verify"] = e.errVerify;
-                    }
-                }
-                obj[fieldRsyncErrMsg.displayName] = e.rsyncErrMsg;
-                obj[fieldRsyncErrCode.displayName] = e.rsyncErrCode;
-            }
+            obj.update(syncFailureToJson(e));
             if (!e.traceLines.empty())
             {
                 obj["Trace"] = e.traceLines;
@@ -303,33 +248,7 @@ sdbusplus::async::task<> displayErrorLogSummary(bool jsonOutput,
         std::println("  {:<18}: {}", fieldFailureTime.displayName,
                      e.failureTime);
         std::println("  {:<18}: {}", fieldPelId.displayName, e.pelId);
-        if (!e.path.empty() || !e.rsyncErrMsg.empty() ||
-            !e.rsyncErrCode.empty())
-        {
-            std::println("  {:<18}: {}", fieldPath.displayName, e.path);
-            if (!e.errReason.empty())
-            {
-                std::println("  {:<18}: {}", "ErrorReason", e.errReason);
-                std::ranges::for_each(e.errCauses | std::views::enumerate,
-                                      [](const auto& t) {
-                    std::println("    {:<16}{} - {}",
-                                 std::get<0>(t) == 0 ? "PossibleCauses" : "",
-                                 std::get<0>(t) == 0 ? ":" : " ",
-                                 std::get<1>(t));
-                });
-                std::ranges::for_each(e.errVerify | std::views::enumerate,
-                                      [](const auto& t) {
-                    std::println("    {:<16}{} - {}",
-                                 std::get<0>(t) == 0 ? "Verify" : "",
-                                 std::get<0>(t) == 0 ? ":" : " ",
-                                 std::get<1>(t));
-                });
-            }
-            std::println("  {:<18}: {}", fieldRsyncErrMsg.displayName,
-                         e.rsyncErrMsg);
-            std::println("  {:<18}: {}", fieldRsyncErrCode.displayName,
-                         e.rsyncErrCode);
-        }
+        printSyncFailureEntry(e);
         if (!e.traceLines.empty())
         {
             std::println("  {:<18}:", "Trace");
@@ -340,6 +259,74 @@ sdbusplus::async::task<> displayErrorLogSummary(bool jsonOutput,
         }
     }
     std::println("{}", separator);
+}
+
+void printSyncFailureEntry(const SummaryEntry& entry)
+{
+    if (!entry.path.empty())
+    {
+        std::println("  {:<18}: {}", fieldPath.displayName, entry.path);
+    }
+
+    if (!entry.errReason.empty())
+    {
+        std::println("  {:<18}: {}", "ErrorReason", entry.errReason);
+        std::ranges::for_each(entry.errCauses | std::views::enumerate,
+                              [](const auto& item) {
+            std::println("    {:<16}{} - {}",
+                         std::get<0>(item) == 0 ? "PossibleCauses" : "",
+                         std::get<0>(item) == 0 ? ":" : " ", std::get<1>(item));
+        });
+        std::ranges::for_each(entry.errVerify | std::views::enumerate,
+                              [](const auto& item) {
+            std::println("    {:<16}{} - {}",
+                         std::get<0>(item) == 0 ? "Verify" : "",
+                         std::get<0>(item) == 0 ? ":" : " ", std::get<1>(item));
+        });
+    }
+
+    if (!entry.rsyncErrMsg.empty())
+    {
+        std::println("  {:<18}: {}", fieldRsyncErrMsg.displayName,
+                     entry.rsyncErrMsg);
+    }
+    if (!entry.rsyncErrCode.empty())
+    {
+        std::println("  {:<18}: {}", fieldRsyncErrCode.displayName,
+                     entry.rsyncErrCode);
+    }
+}
+
+json syncFailureToJson(const SummaryEntry& entry)
+{
+    json result = json::object();
+    if (!entry.path.empty())
+    {
+        result[fieldPath.displayName] = entry.path;
+    }
+
+    if (!entry.errReason.empty())
+    {
+        result["ErrorReason"] = entry.errReason;
+        if (!entry.errCauses.empty())
+        {
+            result["PossibleCauses"] = entry.errCauses;
+        }
+        if (!entry.errVerify.empty())
+        {
+            result["Verify"] = entry.errVerify;
+        }
+    }
+
+    if (!entry.rsyncErrMsg.empty())
+    {
+        result[fieldRsyncErrMsg.displayName] = entry.rsyncErrMsg;
+    }
+    if (!entry.rsyncErrCode.empty())
+    {
+        result[fieldRsyncErrCode.displayName] = entry.rsyncErrCode;
+    }
+    return result;
 }
 
 } // namespace datasynctool::error_summary

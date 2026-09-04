@@ -4,6 +4,8 @@
 #include <nlohmann/json.hpp>
 
 #include <string>
+#include <string_view>
+#include <utility>
 
 namespace datasynctool::utils
 {
@@ -52,5 +54,15 @@ void printParam(std::string key, const T& value);
  * @param[in] data - JSON object to display
  */
 void displayJsonAsText(const json& data);
+
+/**
+ * @brief Run a shell command and capture its output and exit code.
+ *
+ * @param[in] cmd - Shell command to execute
+ *
+ * @return pair containing the command exit code and standard output. The exit
+ *         code is -1 if the command could not be started or reaped.
+ */
+std::pair<int, std::string> runCommand(std::string_view cmd);
 
 } // namespace datasynctool::utils

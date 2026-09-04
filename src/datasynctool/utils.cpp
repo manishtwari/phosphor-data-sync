@@ -2,7 +2,15 @@
 
 #include "utils.hpp"
 
+#include <sys/wait.h>
+
+#include <array>
+#include <cerrno>
+#include <cstdio>
 #include <print>
+#include <span>
+#include <system_error>
+#include <utility>
 
 namespace datasynctool::utils
 {
@@ -121,6 +129,44 @@ void displayJsonAsText(const json& data)
         }
     }
     std::println();
+}
+
+std::pair<int, std::string> runCommand(std::string_view cmd)
+{
+    constexpr std::size_t readBufferSize = 4096;
+
+    // NOLINTNEXTLINE
+    FILE* pipe = popen(std::string(cmd).c_str(), "r");
+    if (pipe == nullptr)
+    {
+        std::println(stderr, "popen failed for command: {}", cmd);
+        return {-1, {}};
+    }
+
+    std::string output;
+    output.reserve(readBufferSize);
+    std::array<char, readBufferSize> buffer{};
+    std::size_t bytesRead = 0;
+    while ((bytesRead = std::fread(buffer.data(), 1, buffer.size(), pipe)) > 0)
+    {
+        const auto chunk = std::span(buffer).first(bytesRead);
+        output.append(chunk.begin(), chunk.end());
+    }
+
+    const int status = pclose(pipe);
+    if (status == -1)
+    {
+        std::println(stderr, "pclose failed: {}",
+                     std::system_category().message(errno));
+        return {-1, std::move(output)};
+    }
+
+    if (WIFEXITED(status))
+    {
+        return {WEXITSTATUS(status), std::move(output)};
+    }
+
+    return {-1, std::move(output)};
 }
 
 } // namespace datasynctool::utils

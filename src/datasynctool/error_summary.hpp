@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <nlohmann/json.hpp>
 #include <sdbusplus/async.hpp>
 
 #include <string>
@@ -80,5 +81,21 @@ struct SummaryEntry
 sdbusplus::async::task<> displayErrorLogSummary(bool jsonOutput,
                                                 std::size_t limit = 1,
                                                 bool includeTrace = false);
+
+/**
+ * @brief Print the sync-failure specific fields in an entry.
+ *
+ * @param[in] entry - Sync failure details to print
+ */
+void printSyncFailureEntry(const SummaryEntry& entry);
+
+/**
+ * @brief Convert the sync-failure specific fields in an entry to JSON.
+ *
+ * @param[in] entry - Sync failure details to convert
+ *
+ * @return JSON object containing the sync failure details
+ */
+nlohmann::ordered_json syncFailureToJson(const SummaryEntry& entry);
 
 } // namespace datasynctool::error_summary
